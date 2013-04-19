@@ -105,10 +105,14 @@ sub body {
 	
 	my (@viewable_sections, @viewable_recitations);
 	
-	if (defined @{$ce->{viewable_sections}->{$user}})
+	if (@{$ce->{viewable_sections}->{$user}})
 		{@viewable_sections = @{$ce->{viewable_sections}->{$user}};}
-	if (defined @{$ce->{viewable_recitations}->{$user}})
+	if (@{$ce->{viewable_recitations}->{$user}})
 		{@viewable_recitations = @{$ce->{viewable_recitations}->{$user}};}
+	#if (defined @{$ce->{viewable_sections}->{$user}})
+		#{@viewable_sections = @{$ce->{viewable_sections}->{$user}};}
+	#if (defined @{$ce->{viewable_recitations}->{$user}})
+		#{@viewable_recitations = @{$ce->{viewable_recitations}->{$user}};}
 	if (@viewable_sections or @viewable_recitations){
 		foreach my $student (@Users){
 			my $keep = 0;
