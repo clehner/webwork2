@@ -36,8 +36,7 @@ use WeBWorK::HTML::ScrollingRecordList qw/scrollingRecordList/;
 use WeBWorK::Utils qw/readFile readDirectory/;
 use WeBWorK::Utils::FilterRecords qw/filterRecords/;
 
-use mod_perl;
-use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
+use Nginx::Simple;
 
 #my $REFRESH_RESIZE_BUTTON = "Set preview to: ";  # handle submit value idiocy
 my $UPDATE_SETTINGS_BUTTON = "Update settings and refresh page"; # handle submit value idiocy
@@ -261,13 +260,7 @@ sub initialize {
 
 	}
 	
-	my $remote_host;
-	if (MP2) {
-		$remote_host = $r->connection->remote_addr->ip_get || "UNKNOWN";
-	} else {
-		(undef, $remote_host) = unpack_sockaddr_in($r->connection->remote_addr);
-		$remote_host = defined $remote_host ? inet_ntoa($remote_host) : "UNKNOWN";
-	}
+	my $remote_host = $r->remote_addr;
 
 	# store data
 	$self->{from}                   =    $from;
@@ -420,19 +413,15 @@ sub initialize {
 				$result_message .= "An error occurred while trying to send email.\n"
 					. "The error message is:\n\n$@\n\n";
 				# and also write it to the apache log
-				$r->log->error("An error occurred while trying to send email: $@\n");
+				$r->log("An error occurred while trying to send email: $@\n");
 			}
 			# this could fail too...
 			eval { $self->email_notification($result_message) };
 			if ($@) {
-				$r->log->error("An error occured while trying to send the email notification: $@\n");
+				$r->log("An error occured while trying to send the email notification: $@\n");
 			}
 		};
-		if (MP2) {
-			$r->connection->pool->cleanup_register($post_connection_action, $r);
-		} else {
-			$r->post_connection($post_connection_action, $r);
-		}
+		$r->post_connection($post_connection_action, $r);
 	} else {
 		$self->addbadmessage(CGI::p("Didn't recognize button $action"));
 	}

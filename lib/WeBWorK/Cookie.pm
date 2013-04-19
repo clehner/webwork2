@@ -32,21 +32,20 @@ Given C<$r>, a WeBWorK::Request object
 use strict;
 use warnings;
 
-use mod_perl;
-use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
+#use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
 
 # This class inherits from Apache::Cookie under mod_perl and Apache2::Cookie under mod_perl2
 BEGIN {
-	if (MP2) {
-		require Apache2::Cookie;
-        require APR::Request::Error;
-		Apache2::Cookie->import;
-		push @WeBWorK::Cookie::ISA, "Apache2::Cookie";
-	} else {
-		require Apache::Cookie;
-		Apache::Cookie->import;
-		push @WeBWorK::Cookie::ISA, "Apache::Cookie";
-	}
+	#if (MP2) {
+	#	require Apache2::Cookie;
+        #require APR::Request::Error;
+	#	Apache2::Cookie->import;
+	#	push @WeBWorK::Cookie::ISA, "Apache2::Cookie";
+	#} else {
+	#	require Apache::Cookie;
+	#	Apache::Cookie->import;
+	#	push @WeBWorK::Cookie::ISA, "Apache::Cookie";
+	#}
 }
 
 1;

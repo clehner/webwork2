@@ -25,6 +25,9 @@ WeBWorK::Constants - provide constant values for other WeBWorK modules.
 use strict;
 use warnings;
 
+# i can't seem to put this in the nginx config
+$WeBWorK::Constants::WEBWORK_DIRECTORY = "/opt/webwork/webwork2";
+
 ################################################################################
 # WeBWorK::Debug
 ################################################################################

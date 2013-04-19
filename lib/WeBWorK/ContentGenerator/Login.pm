@@ -30,7 +30,7 @@ use warnings;
 use WeBWorK::CGI;
 use WeBWorK::Utils qw(readFile dequote);
 
-use mod_perl;
+use Nginx::Simple;
 use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
 
 # This content generator is NOT logged in.

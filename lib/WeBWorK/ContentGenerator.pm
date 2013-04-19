@@ -54,21 +54,16 @@ use WeBWorK::PG;
 use MIME::Base64;
 use WeBWorK::Template qw(template);
 use WeBWorK::Localize;
-use mod_perl;
-use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
+use Nginx::Simple;
+use IO::Callback;
 use Scalar::Util qw(weaken);
 
 our $TRACE_WARNINGS = 0;   # set to 1 to trace channel used by warning message
 
 
 BEGIN {
-	if (MP2) {
-		require Apache2::Const;
-		Apache2::Const->import(-compile => qw/OK NOT_FOUND FORBIDDEN SERVER_ERROR REDIRECT/);
-	} else {
-		require Apache::Constants;
-		Apache::Constants->import(qw/OK NOT_FOUND FORBIDDEN SERVER_ERROR REDIRECT/);
-	}
+	#require Apache2::Const;
+	#Apache2::Const->import(-compile => qw/OK NOT_FOUND FORBIDDEN SERVER_ERROR REDIRECT/);
 }
 
 ###############################################################################
@@ -168,8 +163,8 @@ sub go {
 	my $authz = $r->authz;
 	$self->{invalidSet} = $authz->checkSet();
 	
-	my $returnValue = MP2 ? Apache2::Const::OK : Apache::Constants::OK;
-	
+	my $returnValue = Nginx::Simple::HTTP_OK;
+
 	# We only write to the activity log if it has been defined and if
 	# we are in a specific course.  The latter check is to prevent attempts
 	# to write to a course log file when viewing the top-level list of
@@ -193,12 +188,14 @@ sub go {
 	my $headerReturn = $self->header(@_);
 	$returnValue = $headerReturn if defined $headerReturn;
 	# FIXME: we won't need noContent after reply_with_redirect() is adopted
-	return $returnValue if $r->header_only or $self->{noContent};
+	my $headerOnly = ($r->request_method eq 'HEAD');
+
+	return $returnValue if $headerOnly or $self->{noContent};
 	
 	$self->initialize() if $self->can("initialize");
 	
 	$self->content();
-	
+
 	return $returnValue;
 }
 
@@ -231,31 +228,24 @@ sub do_reply_with_file {
 	my $delete_after = $fileHash->{delete_after};
 	
 	# if there was a problem, we return here and let go() worry about sending the reply
-	return MP2 ? Apache2::Const::NOT_FOUND : Apache::Constants::NOT_FOUND unless -e $source;
-	return MP2 ? Apache2::Const::FORBIDDEN : Apache::Constants::FORBIDDEN unless -r $source;
+	return Nginx::Simple::HTTP_NOT_FOUND unless -e $source;
+	return Nginx::Simple::HTTP_FORBIDDEN unless -r $source;
 	
 	my $fh;
-	if (!MP2) {
-		# open the file now, so we can send the proper error status is we fail
-		open $fh, "<", $source or return Apache::Constants::SERVER_ERROR;
-	}
+	# open the file now, so we can send the proper error status is we fail
+	open $fh, "<", $source or return Nginx::Simple::HTTP_INTERNAL_SERVER_ERROR;
 	
 	# send our custom HTTP header
-	$r->content_type($type);
-	$r->headers_out->{"Content-Disposition"} = "attachment; filename=\"$name\"";
-	$r->send_http_header unless MP2;
+	$r->header($type);
+	$r->header_set("Content-Disposition", "attachment; filename=\"$name\"");
 	
 	# send the file
-	if (MP2) {
-		$r->sendfile($source);
-	} else {
-		$r->send_fd($fh);
-	}
-	
-	if (!MP2) {
-		# close the file and go home
-		close $fh;
-	}
+	my $printer = sub { $r->print(shift); };
+	my $fh_out = IO::Callback->new('>', $printer);
+	pipe($fh, $fh_out);
+
+	# close the file and go home
+	close $fh;
 	
 	if ($delete_after) {
 		unlink $source or warn "failed to unlink $source after sending: $!";
@@ -274,9 +264,8 @@ sub do_reply_with_redirect {
 	my ($self, $url) = @_;
 	my $r = $self->r;
 	
-	$r->status(MP2 ? Apache2::Const::REDIRECT : Apache::Constants::REDIRECT);
-	$r->headers_out->{"Location"} = $url;
-	$r->send_http_header unless MP2;
+	$r->status(Nginx::Simple::HTTP_REDIRECT);
+	$r->location($url);
 	
 	return; # we need to explicitly return noting here, otherwise we return $url under Apache2.
 	        # the return value from the mod_perl handler is used to set the HTTP status code,
@@ -447,9 +436,9 @@ sub header {
 	my $self = shift;
 	my $r = $self->r;
 	
-	$r->content_type("text/html; charset=utf-8");
-	$r->send_http_header unless MP2;
-	return MP2 ? Apache2::Const::OK : Apache::Constants::OK;
+	$r->header("text/html; charset=utf-8");
+	#$r->send_http_header unless MP2;
+	return 200;
 }
 
 =item initialize()
@@ -493,6 +482,10 @@ sub content {
 	my $template = $self->can("templateName") ? $self->templateName : $ce->{defaultThemeTemplate};
 	my $templateFile = "$themesDir/$theme/$template.template";
 	
+	# redirect output from templating to the request's print subroutine
+	my $printer = sub { $r->print(shift); };
+	my $fh = IO::Callback->new('>', $printer);
+	select($fh);
 	template($templateFile, $self);
 }
 
@@ -1117,7 +1110,7 @@ sub warnings {
 	my $r = $self->r;
 	print CGI::p("Entering ContentGenerator::warnings") if $TRACE_WARNINGS;
 	print "\n<!-- BEGIN " . __PACKAGE__ . "::warnings -->\n";
-	my $warnings = MP2 ? $r->notes->get("warnings") : $r->notes("warnings");
+	my $warnings = $r->notes("warnings");
 	print $self->warningOutput($warnings) if $warnings;
 	print "<!-- END " . __PACKAGE__ . "::warnings -->\n";
 	
@@ -1294,7 +1287,7 @@ sub if_warnings {
 	my ($self, $arg) = @_;
 	my $r = $self->r;
 
-	if ( (MP2 ? $r->notes->get("warnings") : $r->notes("warnings")) 
+	if ($r->notes("warnings") 
 	     or ($self->{pgerrors}) )  
 	{
 		return $arg;

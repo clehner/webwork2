@@ -22,13 +22,13 @@ WeBWorK - Dispatch requests to the appropriate content generator.
 
 =head1 SYNOPSIS
 
- my $r = Apache->request;
- my $result = eval { WeBWorK::dispatch($r) };
+ my $r = Nginx->request;
+ my $result = eval { WeBWorK::dispatch_webwork($r) };
  die "something bad happened: $@" if $@;
 
 =head1 DESCRIPTION
 
-C<WeBWorK> is the dispatcher for the WeBWorK system. Given an Apache request
+C<WeBWorK> is the dispatcher for the WeBWorK system. Given a Nginx request
 object, it performs authentication and determines which subclass of
 C<WeBWorK::ContentGenerator> to call.
 
@@ -55,7 +55,7 @@ use WeBWorK::URLPath;
 use WeBWorK::CGI;
 use WeBWorK::Utils qw(runtime_use writeTimingLogEntry);
 
-use mod_perl;
+use Nginx::Simple;
 use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
 
 # Apache2 needs upload class
@@ -87,20 +87,22 @@ BEGIN {
 
 our %SeedCE;
 
-sub dispatch($) {
-	my ($apache) = @_;
-	my $r = WeBWorK::Request->new($apache);
+sub dispatch_webwork($) {
+	my ($nginx_r) = @_;
+	my $r = WeBWorK::Request->new($nginx_r);
 	
-	my $method = $r->method;
-	my $location = $r->location;
+	# some of these variables might be wrong
+	my $method = $r->request_method;
+	my $location = $r->filename;
 	my $uri = $r->uri;
-	my $path_info = $r->path_info | "";
+	my $path_info = $r->uri | "";
 	my $args = $r->args || "";
 	my $dir_config = $r->dir_config;
+	my $webwork_url = $dir_config->{webwork_url};
 	my %conf_vars = map { $_ => $dir_config->{$_} } grep { /^webwork_/ } keys %$dir_config;
 	@SeedCE{keys %conf_vars} = values %conf_vars;
 	
-	debug("\n\n===> Begin " . __PACKAGE__ . "::dispatch() <===\n\n");
+	debug("\n\n===> Begin " . __PACKAGE__ . "::dispatch_webwork() <===\n\n");
 	debug("Hi, I'm the new dispatcher!\n");
 	debug(("-" x 80) . "\n");
 	
@@ -119,7 +121,9 @@ sub dispatch($) {
 	######################################################################
 	# Create a URLPath  object
 	######################################################################
-	my ($path) = $uri =~ m/$location(.*)/;
+	#my ($path) = $uri =~ m/$location(.*)/;
+	$uri =~ s/$webwork_url//g;
+	my $path = $uri;
 	$path = "/" if $path eq ""; # no path at all
 	
 	debug("We can't trust the path-info, so we make our own path.\n");
@@ -195,9 +199,14 @@ sub dispatch($) {
 	
 	debug(("-" x 80) . "\n");
 	
-	my $apache_hostname = $r->hostname;
-	my $apache_port     = $r->get_server_port;
-	my $apache_is_ssl   = ($r->subprocess_env('https') ? 1 : "");
+	# todo: get this from nginx somehow
+	my $apache_hostname = 'example.org';
+	my $apache_port     = 80;
+	my $apache_is_ssl   = 0;
+	#my $apache_hostname = $r->hostname;
+	#my $apache_port     = $r->get_server_port;
+	#my $apache_is_ssl   = ($r->subprocess_env('https') ? 1 : "");
+
 	my $apache_root_url;
 	if ($apache_is_ssl) {
 		$apache_root_url = "https://$apache_hostname";
@@ -235,12 +244,15 @@ sub dispatch($) {
 	$r->language_handle( WeBWorK::Localize::getLoc($language) );
 
 	my @uploads;
-	if (MP2) {
-		my $upload_table = $r->upload;
-		@uploads = values %$upload_table if defined $upload_table;
-	} else {
-		@uploads = $r->upload;
-	}
+	# uploads are not yet supported
+	# todo: make uploads work
+	@uploads = ();
+	#if (MP2) {
+	#	my $upload_table = $r->upload;
+	#	@uploads = values %$upload_table if defined $upload_table;
+	#} else {
+	#	@uploads = $r->upload;
+	#}
 	foreach my $u (@uploads) {
 		# make sure it's a "real" upload
 		next unless $u->filename;

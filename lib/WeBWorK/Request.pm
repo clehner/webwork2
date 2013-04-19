@@ -26,55 +26,16 @@ Apache::Request with additional WeBWorK-specific fields.
 use strict;
 use warnings;
 
-use mod_perl;
-use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
-
-
+use Nginx::Simple;
 use WeBWorK::Localize;
 
-# This class inherits from Apache::Request under mod_perl and Apache2::Request under mod_perl2
+# This class inherits from Apache::Request under mod_perl and Apache2::Request under mod_perl2 and Nginx::Simple under nginx
 BEGIN {
     push @WeBWorK::Request::ISA, "WeBWorK::Localize";
-	if (MP2) {
-		require Apache2::Request;
-		Apache2::Request->import;
-		push @WeBWorK::Request::ISA, "Apache2::Request";
-	} else {
-		require Apache::Request;
-		Apache::Request->import;
-		push @WeBWorK::Request::ISA, "Apache::Request";
-	}
-}
 
-# Apache2::Request's param method doesn't support setting parameters, so we need to provide the
-# behavior in this class if we're running under mod_perl2.
-BEGIN {
-	if (MP2) {
-		*param = *mutable_param;
-	}
-}
-
-sub mutable_param {
-	my $self = shift;
-	
-	if (not defined $self->{paramcache}) {
-		my @names = $self->SUPER::param;
-		@{$self->{paramcache}}{@names} = map { [ $self->SUPER::param($_) ] } @names;
-	}
-	
-	@_ or return keys %{$self->{paramcache}};
-	
-	my $name = shift;
-	if (@_) {
-		my $val = shift;
-		if (ref $val eq "ARRAY") {
-			$self->{paramcache}{$name} = [@$val]; # make a copy
-		} else {
-			$self->{paramcache}{$name} = [$val];
-		}
-	}
-	return unless exists $self->{paramcache}{$name};
-	return wantarray ? @{$self->{paramcache}{$name}} : $self->{paramcache}{$name}->[0];
+	require Nginx::Simple;
+	Nginx::Simple->import;
+	push @WeBWorK::Request::ISA, "Nginx::Simple";
 }
 
 =head1 CONSTRUCTOR
@@ -102,8 +63,8 @@ sub new {
 	my ($invocant, @args) = @_;
 	my $class = ref $invocant || $invocant;
 	# construct the appropriate superclass instance depending on mod_perl version
-	my $apreq_class = MP2 ? "Apache2::Request" : "Apache::Request";
-	return bless { r => $apreq_class->new(@args) }, $class;
+	return bless $args[0], $class;
+	#return bless { r => $apreq_class->new(@args) }, $class;
 }
 
 =back
@@ -201,9 +162,77 @@ if the location is "/", the empty string is returned.
 
 sub location {
 	my $self = shift;
-	my $location = $self->SUPER::location;
+	#my $location = $self->SUPER::location;
+	my $location = $self->uri;
 	return $location eq "/" ? "" : $location;
 }
+
+=item dir_config()
+
+Get config variables.
+In Apache there are passed through from the config file.
+In nginx I haven't figured out how to do that, so they are sitting here.
+
+=cut
+
+sub dir_config {
+	#my $self = shift;
+	return {
+		webwork_url         => "/webwork",
+		webwork_dir         => "/opt/webwork/webwork2",
+		pg_dir              => "/opt/webwork/pg",
+		webwork_htdocs_url  => "/webwork_files",
+		webwork_htdocs_dir  => "/opt/webwork/webwork2/htdocs",
+		webwork_courses_url => "/webwork_course_files",
+		webwork_courses_dir => "/opt/webwork/courses",
+	};
+}
+
+=item dir_config()
+
+Get and set notes about the request. This is implemented in Apache::Request but
+not in Nginx::Simple, so we have it here.
+
+=cut
+
+# based on code from mutable_param
+
+sub notes {
+	my $self = shift;
+	
+	if (not defined $self->{notescache}) {
+		$self->{notescache} = {};
+	}
+	
+	@_ or return keys %{$self->{notescache}};
+	
+	my $name = shift;
+	if (@_) {
+		my $val = shift;
+		if (ref $val eq "ARRAY") {
+			$self->{notescache}{$name} = [@$val]; # make a copy
+		} else {
+			$self->{notescache}{$name} = [$val];
+		}
+	}
+	return unless exists $self->{notescache}{$name};
+	return wantarray ? @{$self->{notescache}{$name}} : $self->{notescache}{$name}->[0];
+}
+
+=item post_connection([$arg])
+
+Register a cleanup handler.
+Currently only one handlers can be registered.
+
+=cut
+
+sub post_connection {
+	my ($self, $code) = @_;
+	#push @{$$self{'PerlCleanupHandler'}}, $code;
+	#todo: allow multiple handlers
+	$self->cleanup = \&code;
+}
+
 
 =back
 

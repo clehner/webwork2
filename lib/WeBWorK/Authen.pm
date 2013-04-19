@@ -60,7 +60,8 @@ use URI::Escape;
 use Carp;
 use Scalar::Util qw(weaken);
 
-use mod_perl;
+use Nginx::Simple;
+use Nginx::Simple::Cookie;
 use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VERSION} >= 2 );
 
 
@@ -173,7 +174,7 @@ sub call_next_authen_method {
 
 =item new($r)
 
-Instantiates a new WeBWorK::Authen object for the given WeBWorK::Requst ($r).
+Instantiates a new WeBWorK::Authen object for the given WeBWorK::Request ($r).
 
 =cut
 
