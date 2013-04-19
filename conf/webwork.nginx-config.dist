@@ -1,0 +1,67 @@
+################################################################################
+# WeBWorK Online Homework Delivery System
+# Copyright © 2000-2010 The WeBWorK Project, http://openwebwork.sf.net/
+# 
+# This program is free software; you can redistribute it and/or modify it under
+# the terms of either: (a) the GNU General Public License as published by the
+# Free Software Foundation; either version 2, or (at your option) any later
+# version, or (b) the "Artistic License" which comes with this package.
+# 
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See either the GNU General Public License or the
+# Artistic License for more details.
+################################################################################
+
+# This file configures nginx to handle requests for WeBWorK. To install WeBWorK
+# support in your nginx configuration, add the following line to
+# your nginx configuration file (nginx.conf), inside the http block:
+# 
+#	 include /path/to/webwork.nginx-config;
+# 
+# or, if your nginx configuration reads from the directory /etc/nginx/conf.d/,
+# copy this file to /etc/nginx/conf.d/webwork.conf
+#
+
+perl_modules "/opt/webwork/webwork2/lib";										
+perl_modules "/opt/webwork/pg/lib";											  
+perl_require Nginx/WeBWorK.pm;												   
+
+server {
+
+	listen [::]:80;
+	server_name your_server;
+	#listen 443 ssl;
+
+	set $webwork_url "/webwork";												 
+	set $pg_dir "/opt/webwork/pg";											   
+	set $webwork_htdocs_url "/webwork_files";									
+	set $webwork_htdocs_dir "/opt/webwork/webwork2/htdocs";					  
+	set $webwork_courses_url "/webwork_course_files";							
+	set $webwork_courses_dir "/opt/webwork/courses";							 
+
+	location /webwork/ {														 
+		perl Nginx::WeBWorK::handler;											
+	}																			
+
+	location /webwork_files/ {												   
+		alias $webwork_htdocs_dir/;											  
+		autoindex on;															
+	}																			
+
+	location ~ ^/webwork_course_files/([^/]*)/(.*)$ {							
+		alias $webwork_courses_dir/$1/html/$2;								   
+		autoindex on;															
+	}																			
+
+	# allows the "show source" button to work for demonstration "courses"		
+	#location ~ ^/webwork_course_files/([^/]*)/show-source.cgi/(.*)$ {			
+		#alias $webwork_courses_dir/$1/html/show-source.cgi/$2;				   
+	#}																			
+
+	# todo:
+	# WebworkSOAP handlers (for integration with moodle)
+	# WebworkWebservice handlers -- for integration with external editor
+
+}																				
+
